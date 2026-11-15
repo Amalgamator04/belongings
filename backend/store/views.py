@@ -186,9 +186,15 @@ def admin_orders(request):
     return paginator.get_paginated_response(OrderSerializer(page, many=True).data)
 
 
-@api_view(['GET'])
+@api_view(['GET', 'POST'])
 @permission_classes([IsAdminUser])
 def admin_categories(request):
+    if request.method == 'POST':
+        serializer = CategorySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     categories = Category.objects.all().order_by('name')
     return Response(CategorySerializer(categories, many=True).data)
 

@@ -41,7 +41,7 @@ Set `VITE_API_BASE_URL` in `frontend/.env.local` to the backend origin for local
 
 The product catalog is loaded from the API. Order totals are calculated from current database prices on the server; the browser's displayed totals are estimates only. Customers can adjust quantities or remove items from the checkout summary before submitting an order. New orders are created with payment status `pending`. Django sends an order-received email after the order is committed, including customer and delivery details, item quantities and totals, hamper selections, personalisation, and payment/order status. In development, it writes to the console; in production, it uses configured SMTP. JWT registration/login, profiles, saved addresses, owner-checked order history, and staff-only admin order management are available. Payment collection/verification, email verification/password reset, and other production readiness checks remain before accepting live orders.
 The order email includes a signed, expiring tracking link for guest orders. Customers can also track signed-in orders from their account. The customer-facing progress uses three stages: Pending, Taken, and Delivered; cancellation is shown separately. Staff can use the protected admin dashboard to filter orders, change detailed fulfillment statuses, and review order counts, status breakdowns, and daily order-value charts.
-Staff can also manage products from the storefront's **Manage products** page, including category, descriptions, price, images, stock, availability, and builder-only visibility.
+Staff can manage categories and products from the storefront's **Manage products** page, including descriptions, price, images, stock, availability, and builder-only visibility.
 
 ## Implemented API routes
 
@@ -57,7 +57,7 @@ Staff can also manage products from the storefront's **Manage products** page, i
 - `GET /api/orders/track/?token=...` (signed guest-order tracking link)
 - `GET /api/admin/orders/`, `GET /api/admin/dashboard/` (staff only; status, date, and search filters)
 - `PATCH /api/admin/orders/{id}/status/` (staff only)
-- `GET /api/admin/categories/`, `GET/POST /api/admin/products/`, `GET/PATCH/DELETE /api/admin/products/{id}/` (staff only)
+- `GET/POST /api/admin/categories/`, `GET/POST /api/admin/products/`, `GET/PATCH/DELETE /api/admin/products/{id}/` (staff only)
 
 The Django admin provides catalog and order management. The API does not yet include Razorpay payment creation/webhook verification, password reset/email verification, coupon CRUD, or a full inventory API.
 

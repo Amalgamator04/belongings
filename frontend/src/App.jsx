@@ -7,7 +7,6 @@ import {
   CircleDollarSign,
   ClipboardList,
   Clock3,
-  Gift,
   Minus,
   PackageCheck,
   Plus,
@@ -1040,7 +1039,11 @@ function AdminDashboard({ auth }) {
 }
 
 function AdminProductManager({ auth }) {
-  const [categoriesState, setCategoriesState] = useState({ categories: [], error: '' })
+  const [categoriesState, setCategoriesState] = useState({
+    categories: [],
+    error: '',
+    loading: true,
+  })
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [builderFilter, setBuilderFilter] = useState('all')
@@ -1054,6 +1057,10 @@ function AdminProductManager({ auth }) {
   })
   const [form, setForm] = useState(null)
   const [formError, setFormError] = useState('')
+  const [categoryFormOpen, setCategoryFormOpen] = useState(false)
+  const [categoryName, setCategoryName] = useState('')
+  const [categoryFormError, setCategoryFormError] = useState('')
+  const [categorySaving, setCategorySaving] = useState(false)
   const [saving, setSaving] = useState(false)
   const requestKey = JSON.stringify([search, categoryFilter, builderFilter, page, reloadKey])
   const hasCurrentProducts = productsState.key === requestKey
@@ -1071,7 +1078,11 @@ function AdminProductManager({ auth }) {
       headers: { Authorization: `Bearer ${auth.access}` },
     })
       .then((response) => {
-        if (active) setCategoriesState({ categories: response.data, error: '' })
+        if (active) setCategoriesState({
+          categories: response.data,
+          error: '',
+          loading: false,
+        })
       })
       .catch((requestError) => {
         if (!active) return
@@ -1081,6 +1092,7 @@ function AdminProductManager({ auth }) {
           error: requestError.response?.status === 403
             ? 'This account does not have permission to manage products.'
             : 'We could not load product categories. Please try again.',
+          loading: false,
         })
       })
     return () => { active = false }
@@ -1158,6 +1170,37 @@ function AdminProductManager({ auth }) {
 
   const updateForm = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }))
+  }
+
+  const saveCategory = async (event) => {
+    event.preventDefault()
+    setCategorySaving(true)
+    setCategoryFormError('')
+    const name = categoryName.trim()
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/admin/categories/`,
+        { name, slug },
+        { headers },
+      )
+      setCategoriesState((current) => ({
+        ...current,
+        categories: [...current.categories, response.data].sort((a, b) => a.name.localeCompare(b.name)),
+        error: '',
+      }))
+      setCategoryFormOpen(false)
+      setCategoryName('')
+    } catch (requestError) {
+      console.error('Unable to create a catalog category.', requestError)
+      const responseData = requestError.response?.data
+      const firstFieldError = responseData && typeof responseData === 'object'
+        ? Object.values(responseData).flat().find((value) => typeof value === 'string')
+        : null
+      setCategoryFormError(firstFieldError || 'We could not create this category. Please try again.')
+    } finally {
+      setCategorySaving(false)
+    }
   }
 
   const saveProduct = async (event) => {
@@ -1253,6 +1296,16 @@ function AdminProductManager({ auth }) {
           </Link>
           <button
             type="button"
+            onClick={() => {
+              setCategoryFormOpen(true)
+              setCategoryFormError('')
+            }}
+            className="rounded-full border border-[#E9D8D2] bg-white px-4 py-2.5 text-sm font-medium text-[#514542]"
+          >
+            Add category
+          </button>
+          <button
+            type="button"
             onClick={startCreate}
             disabled={!categories.length}
             className="rounded-full bg-[#514542] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
@@ -1263,6 +1316,37 @@ function AdminProductManager({ auth }) {
       </header>
 
       {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+
+      {categoryFormOpen && (
+        <form onSubmit={saveCategory} className="space-y-4 rounded-[24px] border border-[#E9D8D2] bg-white p-5 md:p-7">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold text-[#2d1b21]">Add catalog category</h2>
+            <button type="button" onClick={() => setCategoryFormOpen(false)} className="text-sm text-[#645761] underline">
+              Cancel
+            </button>
+          </div>
+          {categoryFormError && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{categoryFormError}</p>}
+          <label className="block max-w-lg text-sm font-medium text-[#514542]">
+            Category name
+            <input
+              required
+              value={categoryName}
+              onChange={(event) => setCategoryName(event.target.value)}
+              className="mt-2 w-full rounded-xl border border-[#E9D8D2] bg-white px-3 py-2.5 font-normal"
+              placeholder="For example, Gift hampers"
+            />
+          </label>
+          <button type="submit" disabled={categorySaving} className="rounded-full bg-[#514542] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+            {categorySaving ? 'Saving…' : 'Save category'}
+          </button>
+        </form>
+      )}
+
+      {!categories.length && !categoriesState.loading && !categoriesState.error && (
+        <p role="status" className="rounded-xl bg-[#F5EFE6] px-4 py-3 text-sm text-[#514542]">
+          No categories yet. Add a category to enable product creation.
+        </p>
+      )}
 
       {form && (
         <form onSubmit={saveProduct} className="space-y-5 rounded-[24px] border border-[#E9D8D2] bg-white p-5 md:p-7">

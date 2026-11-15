@@ -300,6 +300,14 @@ class AdminProductCatalogTests(APITestCase):
     def test_catalog_endpoints_are_staff_only(self):
         self.assertEqual(self.client.get(reverse('admin-products')).status_code, 401)
         self.assertEqual(self.client.get(reverse('admin-categories')).status_code, 401)
+        self.assertEqual(
+            self.client.post(
+                reverse('admin-categories'),
+                {'name': 'Gift hampers', 'slug': 'gift-hampers'},
+                format='json',
+            ).status_code,
+            401,
+        )
 
         customer = get_user_model().objects.create_user(
             username='catalog-customer',
@@ -309,6 +317,31 @@ class AdminProductCatalogTests(APITestCase):
         self.client.force_authenticate(customer)
         self.assertEqual(self.client.get(reverse('admin-products')).status_code, 403)
         self.assertEqual(self.client.get(reverse('admin-categories')).status_code, 403)
+        self.assertEqual(
+            self.client.post(
+                reverse('admin-categories'),
+                {'name': 'Gift hampers', 'slug': 'gift-hampers'},
+                format='json',
+            ).status_code,
+            403,
+        )
+
+    def test_staff_can_create_category_for_catalog_products(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            reverse('admin-categories'),
+            {'name': 'Girls accessories', 'slug': 'girls-accessories'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['name'], 'Girls accessories')
+        self.assertTrue(
+            Category.objects.filter(
+                pk=response.data['id'],
+                slug='girls-accessories',
+            ).exists()
+        )
 
     def test_staff_can_filter_create_update_and_delete_products(self):
         builder_item = Product.objects.create(
