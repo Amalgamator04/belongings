@@ -215,7 +215,14 @@ def send_order_confirmation(order: Order, tracking_url: str = '') -> bool:
     message.attach_alternative(html_body, 'text/html')
 
     try:
-        return message.send(fail_silently=False) == 1
+        sent_count = message.send(fail_silently=False)
+        if sent_count != 1:
+            logger.error(
+                'Email backend returned %s messages for order confirmation %s.',
+                sent_count,
+                order.pk,
+            )
+        return sent_count == 1
     except (smtplib.SMTPException, OSError):
         logger.exception('Could not send order confirmation for order %s.', order.pk)
         return False

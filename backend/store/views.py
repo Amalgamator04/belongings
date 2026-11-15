@@ -28,7 +28,6 @@ from .models import Address, Category, NewsletterSubscriber, Order, OrderItem, P
 from .serializers import (
     AdminProductSerializer,
     AddressSerializer,
-    BuilderItemSerializer,
     CategorySerializer,
     OrderCreateSerializer,
     OrderSerializer,
@@ -341,12 +340,6 @@ def admin_products(request):
         if not category_id.isdecimal():
             raise ValidationError({'category': 'Choose a valid category.'})
         products = products.filter(category_id=int(category_id))
-    builder_only = request.query_params.get('builder_only', '').strip().lower()
-    if builder_only in {'true', 'false'}:
-        products = products.filter(is_builder_only=(builder_only == 'true'))
-    elif builder_only and builder_only != 'all':
-        raise ValidationError({'builder_only': 'Choose true, false, or all.'})
-
     paginator = PageNumberPagination()
     paginator.page_size = 20
     page = paginator.paginate_queryset(products.order_by('name', 'pk'), request)
@@ -360,7 +353,7 @@ def admin_products_import(request):
     allowed_headers = {
         'name', 'slug', 'category', 'category_slug', 'short_description', 'description',
         'price', 'compare_price', 'image', 'gallery', 'tags', 'badge', 'occasion',
-        'stock', 'is_featured', 'is_available', 'is_builder_only', 'rating',
+        'stock', 'is_featured', 'is_available', 'rating',
     }
     headers, rows = _read_admin_csv(request.FILES.get('file'), allowed_headers)
     if 'name' not in headers or not {'category', 'category_slug'} & set(headers):
@@ -398,8 +391,7 @@ def admin_products_import(request):
             data['category'] = category.pk
         for field in (
             'short_description', 'description', 'price', 'compare_price', 'image',
-            'badge', 'occasion', 'stock', 'is_featured', 'is_available',
-            'is_builder_only', 'rating',
+            'badge', 'occasion', 'stock', 'is_featured', 'is_available', 'rating',
         ):
             if row.get(field):
                 data[field] = row[field]
@@ -493,12 +485,9 @@ def admin_dashboard(request):
             for row in daily_totals
         ],
         'products': Product.objects.filter(
-            is_builder_only=False,
             price__isnull=False,
         ).count(),
-        'builder_items': Product.objects.filter(is_builder_only=True).count(),
         'low_stock_products': Product.objects.filter(
-            is_builder_only=False,
             price__isnull=False,
             stock__lte=5,
         ).count(),
@@ -508,7 +497,6 @@ def admin_dashboard(request):
 def categories(request):
     queryset = Category.objects.filter(
         products__is_available=True,
-        products__is_builder_only=False,
         products__price__isnull=False,
     ).distinct().order_by('name')
     serializer = CategorySerializer(queryset, many=True)
@@ -532,7 +520,6 @@ def subscribe_newsletter(request):
 def product_list(request):
     queryset = Product.objects.select_related('category').filter(
         is_available=True,
-        is_builder_only=False,
         price__isnull=False,
     )
     search = request.query_params.get('search')
@@ -577,7 +564,6 @@ def product_detail_by_id(request, product_id):
         Product.objects.select_related('category'),
         pk=product_id,
         is_available=True,
-        is_builder_only=False,
         price__isnull=False,
     )
     return Response(ProductSerializer(product).data)
@@ -587,15 +573,14 @@ def product_detail_by_id(request, product_id):
 def builder_item_list(request):
     queryset = Product.objects.select_related('category').filter(
         is_available=True,
-        is_builder_only=True,
+        price__isnull=False,
     ).order_by('category__name', 'name')
-    return Response(BuilderItemSerializer(queryset, many=True).data)
+    return Response(ProductSerializer(queryset, many=True).data)
 
 
 @api_view(['GET'])
 def product_detail(request, slug):
     queryset = Product.objects.select_related('category').filter(
-        is_builder_only=False,
         price__isnull=False,
     )
     product = get_object_or_404(queryset, slug=slug)
@@ -628,7 +613,7 @@ def create_order(request):
                 raise ValidationError({'items': f'Product {product_id} is unavailable.'})
             if product.price is None:
                 raise ValidationError({
-                    'items': f'{product.name} is available for builder selection only and cannot be ordered yet.'
+                    'items': f'{product.name} must have a sale price before it can be ordered.'
                 })
             reserved = reserved_quantities.get(product_id, 0)
             if product.stock - reserved < quantity:

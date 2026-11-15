@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -95,6 +96,22 @@ class OrderCreationTests(APITestCase):
         self.assertEqual(tracking_response.data['tracking_status'], 'delivered')
         self.assertEqual(tracking_response.data['status_label'], 'Delivered')
 
+    def test_unsent_confirmation_is_reported_and_logged(self):
+        with patch('store.services.EmailMultiAlternatives.send', return_value=0):
+            with self.assertLogs('store.services', level='ERROR') as captured_logs:
+                response = self.client.post(
+                    self.order_url,
+                    {
+                        **self.customer,
+                        'items': [{'product_id': self.product.pk, 'quantity': 1}],
+                    },
+                    format='json',
+                )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['confirmation_email_status'], 'failed')
+        self.assertTrue(any('returned 0 messages' in message for message in captured_logs.output))
+
     def test_invalid_tracking_token_does_not_reveal_order(self):
         response = self.client.get(reverse('track-order'), {'token': 'invalid'})
 
@@ -188,40 +205,50 @@ class OrderCreationTests(APITestCase):
         self.assertEqual(second.status_code, 200)
 
 
-class BuilderItemTests(APITestCase):
+class BuilderProductTests(APITestCase):
     def setUp(self):
         category = Category.objects.create(name='Girls accessories', slug='girls-accessories')
-        self.item = Product.objects.create(
+        self.product = Product.objects.create(
             category=category,
             name='Satin scrunchie',
-            slug='builder-satin-scrunchie',
+            slug='satin-scrunchie',
+            price=Decimal('300.00'),
+            stock=10,
+        )
+        self.unpriced_product = Product.objects.create(
+            category=category,
+            name='Unpriced product',
+            slug='unpriced-product',
             price=None,
             stock=10,
-            is_builder_only=True,
         )
 
-    def test_builder_items_are_available_without_exposing_prices_or_shop_products(self):
+    def test_builder_uses_purchasable_catalog_products_only(self):
         builder_response = self.client.get(reverse('builder-items'))
         shop_response = self.client.get(reverse('products'))
 
         self.assertEqual(builder_response.status_code, 200)
-        self.assertEqual(builder_response.data[0]['name'], self.item.name)
-        self.assertNotIn('price', builder_response.data[0])
-        self.assertNotIn(self.item.pk, [product['id'] for product in shop_response.data['results']])
+        builder_ids = [product['id'] for product in builder_response.data]
+        shop_ids = [product['id'] for product in shop_response.data['results']]
+        self.assertIn(self.product.pk, builder_ids)
+        self.assertNotIn(self.unpriced_product.pk, builder_ids)
+        self.assertIn(self.product.pk, shop_ids)
+        self.assertEqual(builder_response.data[0]['price'], '300.00')
 
-    def test_unpriced_builder_item_cannot_be_ordered(self):
+    def test_unpriced_catalog_product_cannot_be_ordered(self):
         response = self.client.post(
             reverse('orders'),
             {
                 'customer_name': 'Asha Customer',
                 'email': 'asha@example.com',
                 'delivery_address': '12 Rose Street, Bengaluru, 560001',
-                'items': [{'product_id': self.item.pk, 'quantity': 1}],
+                'items': [{'product_id': self.unpriced_product.pk, 'quantity': 1}],
             },
             format='json',
         )
 
         self.assertEqual(response.status_code, 400)
+        self.assertIn('sale price', response.data['items'])
         self.assertFalse(Order.objects.exists())
 
 
@@ -416,9 +443,9 @@ class AdminProductCatalogTests(APITestCase):
 
         product_csv = SimpleUploadedFile(
             'products.csv',
-            b'name,category_slug,price,is_builder_only,gallery,tags\n'
-            b'Candle,candles,20,false,,home|scent\n'
-            b'Satin Scrunchie,gift-hampers,,true,,hair|gift\n',
+            b'name,category_slug,price,gallery,tags\n'
+            b'Candle,candles,20,,home|scent\n'
+            b'Satin Scrunchie,gift-hampers,150,,hair|gift\n',
             content_type='text/csv',
         )
         products_response = self.client.post(
@@ -433,9 +460,8 @@ class AdminProductCatalogTests(APITestCase):
         self.assertEqual(candle.category.slug, 'candles')
         self.assertEqual(candle.price, Decimal('20.00'))
         self.assertEqual(candle.tags, ['home', 'scent'])
-        builder_item = Product.objects.get(slug='satin-scrunchie')
-        self.assertTrue(builder_item.is_builder_only)
-        self.assertIsNone(builder_item.price)
+        scrunchie = Product.objects.get(slug='satin-scrunchie')
+        self.assertEqual(scrunchie.price, Decimal('150.00'))
 
     def test_invalid_product_csv_does_not_import_any_rows(self):
         self.client.force_authenticate(self.admin)
@@ -463,20 +489,12 @@ class AdminProductCatalogTests(APITestCase):
         self.assertEqual(Product.objects.count(), product_count)
         self.assertFalse(Product.objects.filter(slug='valid-product').exists())
 
-    def test_staff_can_filter_create_update_and_delete_products(self):
-        builder_item = Product.objects.create(
-            category=self.category,
-            name='Satin scrunchie',
-            slug='satin-scrunchie',
-            price=None,
-            is_builder_only=True,
-        )
+    def test_staff_can_manage_products(self):
         self.client.force_authenticate(self.admin)
 
-        listing = self.client.get(reverse('admin-products'), {'builder_only': 'true'})
+        listing = self.client.get(reverse('admin-products'))
         self.assertEqual(listing.status_code, 200)
-        self.assertEqual([item['id'] for item in listing.data['results']], [builder_item.pk])
-        self.assertTrue(listing.data['results'][0]['is_builder_only'])
+        self.assertIn(self.product.pk, [item['id'] for item in listing.data['results']])
 
         created = self.client.post(
             reverse('admin-products'),

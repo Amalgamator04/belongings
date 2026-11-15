@@ -5,8 +5,8 @@ from .models import Address, Category, NewsletterSubscriber, Order, OrderItem, P
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'category', 'price', 'is_builder_only', 'is_available')
-    list_filter = ('category', 'is_builder_only', 'is_available')
+    list_display = ('name', 'category', 'price', 'is_available')
+    list_filter = ('category', 'is_available')
     search_fields = ('name', 'slug')
 
 

@@ -37,7 +37,6 @@ class Product(models.Model):
     stock = models.PositiveIntegerField(default=0)
     is_featured = models.BooleanField(default=False)
     is_available = models.BooleanField(default=True)
-    is_builder_only = models.BooleanField(default=False)
     rating = models.FloatField(default=0.0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

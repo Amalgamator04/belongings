@@ -18,11 +18,11 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-For local development, the backend uses SQLite whenever `DATABASE_URL` is empty. To connect to PostgreSQL, set a non-empty `DATABASE_URL` in `backend/.env`; this takes precedence over the local SQLite fallback. With `DJANGO_DEBUG=false`, a non-empty `DATABASE_URL` is required. Run migrations after changing database settings. The API is available at `http://localhost:8000`. Create an administrator with `python manage.py createsuperuser`, then add catalog categories and products in the Django admin at `/admin/`. Builder-only selections are managed separately and do not appear in the public shop.
+For local development, the backend uses SQLite whenever `DATABASE_URL` is empty. To connect to PostgreSQL, set a non-empty `DATABASE_URL` in `backend/.env`; this takes precedence over the local SQLite fallback. With `DJANGO_DEBUG=false`, a non-empty `DATABASE_URL` is required. Run migrations after changing database settings. The API is available at `http://localhost:8000`. Create an administrator with `python manage.py createsuperuser`, then add catalog categories and products in the Django admin at `/admin/`. The hamper builder uses available products with sale prices from the catalog.
 
 Set `EMAIL_HOST_PASSWORD` in the local `.env` to a Gmail App Password to send real mail; the backend removes formatting spaces from Gmail app passwords. Keep it private and do not commit it. Until configured, email delivery will fail explicitly in the checkout response; tests use Django's in-memory email backend.
 
-To populate the development catalog, run `python manage.py seed_demo_catalog` from `backend`. The command is safe to rerun and creates 12 marked demo shop products plus 35 builder-only selection options. Builder-only items have no customer price and cannot be ordered until configured in Django admin. Replace or remove demo records before launch; they are not real inventory.
+To populate the development catalog, run `python manage.py seed_demo_catalog` from `backend`. The command is safe to rerun and creates 12 marked demo shop products. Replace or remove demo records before launch; they are not real inventory.
 
 ### Frontend
 
@@ -41,15 +41,15 @@ Set `VITE_API_BASE_URL` in `frontend/.env.local` to the backend origin for local
 
 The product catalog is loaded from the API. Order totals are calculated from current database prices on the server; the browser's displayed totals are estimates only. Customers can adjust quantities or remove items from the checkout summary before submitting an order. New orders are created with payment status `pending`. Django sends an order-received email after the order is committed, including customer and delivery details, item quantities and totals, hamper selections, personalisation, and payment/order status. In development, it writes to the console; in production, it uses configured SMTP. JWT registration/login, profiles, saved addresses, owner-checked order history, and staff-only admin order management are available. Payment collection/verification, email verification/password reset, and other production readiness checks remain before accepting live orders.
 The order email includes a signed, expiring tracking link for guest orders. Customers can also track signed-in orders from their account. The customer-facing progress uses three stages: Pending, Taken, and Delivered; cancellation is shown separately. Staff can use the protected admin dashboard to filter orders, change detailed fulfillment statuses, and review order counts, status breakdowns, and daily order-value charts.
-Staff can manage categories and products from the storefront's **Manage products** page, including descriptions, price, images, stock, availability, and builder-only visibility.
-The same staff-only page supports category and product CSV imports and downloadable templates. CSVs must be UTF-8, no larger than 2 MB, and contain at most 500 data rows. Category columns are `name,slug,description,accent,icon`; `name` is required and a blank `slug` is generated from the name. Product columns are `name,slug,category_slug,category,short_description,description,price,compare_price,image,gallery,tags,badge,occasion,stock,is_featured,is_available,is_builder_only,rating`; `name` and either `category_slug` or `category` are required. Reference an existing category by slug or name. Blank product slugs are generated from the name. `gallery` and `tags` accept pipe-separated values or a JSON array. Customer-facing products need a price; builder-only products may leave it blank. Imports only create records: existing or repeated slugs and any invalid row reject the entire file without partial changes.
+Staff can manage categories and products from the storefront's **Manage products** page, including descriptions, price, images, stock, and availability.
+The same staff-only page supports category and product CSV imports and downloadable templates. CSVs must be UTF-8, no larger than 2 MB, and contain at most 500 data rows. Category columns are `name,slug,description,accent,icon`; `name` is required and a blank `slug` is generated from the name. Product columns are `name,slug,category_slug,category,short_description,description,price,compare_price,image,gallery,tags,badge,occasion,stock,is_featured,is_available,rating`; `name`, `price`, and either `category_slug` or `category` are required. Reference an existing category by slug or name. Blank product slugs are generated from the name. `gallery` and `tags` accept pipe-separated values or a JSON array. Imports only create records: existing or repeated slugs and any invalid row reject the entire file without partial changes.
 
 ## Implemented API routes
 
 - `GET /api/`, `GET /api/categories/`
 - `POST /api/newsletter/`
 - `GET /api/products/` (search, category, price range, ordering, pagination)
-- `GET /api/builder-items/` (builder-only selections without customer prices)
+- `GET /api/builder-items/` (available, priced products for the hamper builder)
 - `GET /api/products/{id}/` and `GET /api/products/{slug}/`
 - `POST /api/auth/register/`, `POST /api/auth/login/`, `POST /api/auth/refresh/`, `POST /api/auth/logout/`
 - `GET/PATCH /api/profile/`, `GET/POST /api/addresses/`

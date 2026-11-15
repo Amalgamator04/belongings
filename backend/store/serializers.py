@@ -110,7 +110,6 @@ class AdminProductSerializer(serializers.ModelSerializer):
             'stock',
             'is_featured',
             'is_available',
-            'is_builder_only',
             'rating',
             'created_at',
             'updated_at',
@@ -118,34 +117,12 @@ class AdminProductSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'category_name', 'created_at', 'updated_at']
 
     def validate(self, attrs):
-        is_builder_only = attrs.get(
-            'is_builder_only',
-            self.instance.is_builder_only if self.instance else False,
-        )
         price = attrs.get('price', self.instance.price if self.instance else None)
-        if not is_builder_only and price is None:
+        if price is None:
             raise serializers.ValidationError({
                 'price': 'A customer-facing product must have a sale price.',
             })
         return attrs
-
-
-class BuilderItemSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='category.name', read_only=True)
-
-    class Meta:
-        model = Product
-        fields = [
-            'id',
-            'name',
-            'slug',
-            'category_name',
-            'short_description',
-            'description',
-            'image',
-            'gallery',
-            'badge',
-        ]
 
 
 class OrderItemSerializer(serializers.ModelSerializer):

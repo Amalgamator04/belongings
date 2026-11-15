@@ -85,9 +85,9 @@ function App() {
   const [cart, setCart] = useState(getStoredCart)
   const [auth, setAuth] = useState(getStoredAuth)
   const [shopProducts, setShopProducts] = useState([])
-  const [builderItems, setBuilderItems] = useState([])
-  const [builderItemsLoading, setBuilderItemsLoading] = useState(true)
-  const [builderItemsError, setBuilderItemsError] = useState('')
+  const [builderProducts, setBuilderProducts] = useState([])
+  const [builderProductsLoading, setBuilderProductsLoading] = useState(true)
+  const [builderProductsError, setBuilderProductsError] = useState('')
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [catalogError, setCatalogError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
@@ -115,20 +115,20 @@ function App() {
     axios
       .get(`${API_BASE_URL}/api/builder-items/`)
       .then((response) => {
-        setBuilderItems(response.data.map((item) => ({
+        setBuilderProducts(response.data.map((item) => ({
           ...item,
           category: item.category_name,
           shortDescription: item.short_description,
-          price: null,
-          is_builder_only: true,
+          comparePrice: Number(item.compare_price),
+          price: Number(item.price),
           gallery: item.gallery?.length ? item.gallery : [item.image],
         })))
       })
       .catch((error) => {
-        console.error('Unable to load custom hamper selections.', error)
-        setBuilderItemsError('We could not load the hamper selections. Please try again later.')
+        console.error('Unable to load products for the hamper builder.', error)
+        setBuilderProductsError('We could not load products for the hamper builder. Please try again later.')
       })
-      .finally(() => setBuilderItemsLoading(false))
+      .finally(() => setBuilderProductsLoading(false))
   }, [])
 
   useEffect(() => {
@@ -222,10 +222,9 @@ function App() {
               path="/builder"
               element={
                 <BuilderPage
-                  products={shopProducts}
-                  builderItems={builderItems}
-                  builderItemsLoading={builderItemsLoading}
-                  builderItemsError={builderItemsError}
+                  products={builderProducts}
+                  productsLoading={builderProductsLoading}
+                  productsError={builderProductsError}
                   addToCart={addToCart}
                 />
               }
@@ -1046,7 +1045,6 @@ function AdminProductManager({ auth }) {
   })
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
-  const [builderFilter, setBuilderFilter] = useState('all')
   const [page, setPage] = useState(1)
   const [reloadKey, setReloadKey] = useState(0)
   const [productsState, setProductsState] = useState({
@@ -1065,7 +1063,7 @@ function AdminProductManager({ auth }) {
   const [saving, setSaving] = useState(false)
   const categoryCsvInput = useRef(null)
   const productCsvInput = useRef(null)
-  const requestKey = JSON.stringify([search, categoryFilter, builderFilter, page, reloadKey])
+  const requestKey = JSON.stringify([search, categoryFilter, page, reloadKey])
   const hasCurrentProducts = productsState.key === requestKey
   const products = hasCurrentProducts ? productsState.products : []
   const count = hasCurrentProducts ? productsState.count : 0
@@ -1107,7 +1105,6 @@ function AdminProductManager({ auth }) {
     const requestHeaders = { Authorization: `Bearer ${auth.access}` }
     if (search.trim()) params.set('search', search.trim())
     if (categoryFilter) params.set('category', categoryFilter)
-    if (builderFilter !== 'all') params.set('builder_only', builderFilter)
     axios.get(`${API_BASE_URL}/api/admin/products/`, { params, headers: requestHeaders })
       .then((response) => {
         if (!active) return
@@ -1131,7 +1128,7 @@ function AdminProductManager({ auth }) {
         })
       })
     return () => { active = false }
-  }, [auth.access, builderFilter, categoryFilter, page, requestKey, search])
+  }, [auth.access, categoryFilter, page, requestKey, search])
 
   const startCreate = () => {
     setForm({
@@ -1151,7 +1148,6 @@ function AdminProductManager({ auth }) {
       stock: '0',
       is_featured: false,
       is_available: true,
-      is_builder_only: false,
       rating: '0',
     })
     setFormError('')
@@ -1221,12 +1217,12 @@ function AdminProductManager({ auth }) {
           [
             'name', 'slug', 'category_slug', 'short_description', 'description', 'price',
             'compare_price', 'image', 'gallery', 'tags', 'badge', 'occasion', 'stock',
-            'is_featured', 'is_available', 'is_builder_only', 'rating',
+            'is_featured', 'is_available', 'rating',
           ],
           [
             'Rose Gift Box', 'rose-gift-box', 'gift-hampers', 'A curated gift box', '',
             '1250', '1500', 'https://example.com/rose-box.jpg', '', 'rose|birthday',
-            'Gift idea', 'Birthday', '10', 'true', 'true', 'false', '4.8',
+            'Gift idea', 'Birthday', '10', 'true', 'true', '4.8',
           ],
         ],
       },
@@ -1505,7 +1501,7 @@ function AdminProductManager({ auth }) {
                 {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
               </select>
             </label>
-            {textField('price', 'Sale price (₹)', { type: 'number', min: '0', step: '0.01' })}
+            {textField('price', 'Sale price (₹)', { required: true, type: 'number', min: '0', step: '0.01' })}
             {textField('compare_price', 'Compare-at price (₹)', { type: 'number', min: '0', step: '0.01' })}
             {textField('stock', 'Stock quantity', { type: 'number', min: '0', step: '1' })}
             {textField('short_description', 'Short description', { className: 'md:col-span-2' })}
@@ -1521,7 +1517,6 @@ function AdminProductManager({ auth }) {
             {[
               ['is_available', 'Available for purchase'],
               ['is_featured', 'Featured product'],
-              ['is_builder_only', 'Builder-only selection'],
             ].map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 text-sm text-[#514542]">
                 <input
@@ -1535,7 +1530,7 @@ function AdminProductManager({ auth }) {
             ))}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-[#645761]">Builder-only selections stay out of the Shop. Customer-facing products need a sale price.</p>
+            <p className="text-xs text-[#645761]">Products require a sale price to appear in the Shop and hamper builder.</p>
             <button type="submit" disabled={saving} className="rounded-full bg-[#514542] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">
               {saving ? 'Saving…' : 'Save product'}
             </button>
@@ -1544,7 +1539,7 @@ function AdminProductManager({ auth }) {
       )}
 
       <section className="overflow-hidden rounded-[24px] border border-[#E9D8D2] bg-white">
-        <div className="grid gap-3 border-b border-[#E9D8D2] p-5 md:grid-cols-3">
+        <div className="grid gap-3 border-b border-[#E9D8D2] p-5 md:grid-cols-2">
           <label className="text-sm font-medium text-[#514542]">
             Search products
             <input
@@ -1561,14 +1556,6 @@ function AdminProductManager({ auth }) {
               {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </label>
-          <label className="text-sm font-medium text-[#514542]">
-            Product type
-            <select value={builderFilter} onChange={(event) => { setBuilderFilter(event.target.value); setPage(1) }} className="mt-2 w-full rounded-xl border border-[#E9D8D2] bg-[#F5EFE6] px-3 py-2.5 font-normal">
-              <option value="all">All products</option>
-              <option value="false">Shop products</option>
-              <option value="true">Builder-only selections</option>
-            </select>
-          </label>
         </div>
         <div className="flex items-center justify-between gap-3 px-5 py-4">
           <p className="text-sm text-[#645761]">{count} products</p>
@@ -1582,7 +1569,7 @@ function AdminProductManager({ auth }) {
                 <th className="px-5 py-3 font-semibold">Category</th>
                 <th className="px-5 py-3 font-semibold">Price</th>
                 <th className="px-5 py-3 font-semibold">Stock</th>
-                <th className="px-5 py-3 font-semibold">Visibility</th>
+                <th className="px-5 py-3 font-semibold">Availability</th>
                 <th className="px-5 py-3 font-semibold">Actions</th>
               </tr>
             </thead>
@@ -1597,8 +1584,7 @@ function AdminProductManager({ auth }) {
                   <td className="px-5 py-4">{product.price == null ? '—' : formatMoney(Number(product.price))}</td>
                   <td className="px-5 py-4">{product.stock}</td>
                   <td className="px-5 py-4">
-                    <div>{product.is_builder_only ? 'Builder only' : 'Shop'}</div>
-                    <div className={`mt-1 text-xs ${product.is_available ? 'text-green-700' : 'text-[#8b4b4b]'}`}>
+                    <div className={`text-xs ${product.is_available ? 'text-green-700' : 'text-[#8b4b4b]'}`}>
                       {product.is_available ? 'Available' : 'Unavailable'}
                     </div>
                   </td>
@@ -2091,7 +2077,7 @@ function ProductPage({ products, addToCart }) {
   )
 }
 
-function BuilderPage({ products, builderItems, builderItemsLoading, builderItemsError, addToCart }) {
+function BuilderPage({ products, productsLoading, productsError, addToCart }) {
   const navigate = useNavigate()
   const steps = [
     { key: 'occasion', label: 'Occasion', options: hamperOptions.occasions },
@@ -2107,7 +2093,7 @@ function BuilderPage({ products, builderItems, builderItemsLoading, builderItems
   const [budgetWarning, setBudgetWarning] = useState('')
   const [customBudget, setCustomBudget] = useState('')
   const [builderCategory, setBuilderCategory] = useState('All')
-  const builderChoices = [...products, ...builderItems]
+  const builderChoices = products
   const builderCategories = [...new Set(builderChoices.map((product) => product.category))]
   const visibleBuilderChoices = builderCategory === 'All'
     ? builderChoices
@@ -2145,7 +2131,6 @@ function BuilderPage({ products, builderItems, builderItemsLoading, builderItems
       ),
     [builder.selectedProducts],
   )
-  const hasSelectionOnlyItems = builder.selectedProducts.some((item) => item.is_builder_only)
   const budgetValues = builder.budget.match(/\d[\d,]*/g) || []
   const budgetLimit = builder.budget.includes('+')
     ? Number.POSITIVE_INFINITY
@@ -2157,8 +2142,8 @@ function BuilderPage({ products, builderItems, builderItemsLoading, builderItems
     totalValue + packagingCharge + personalisationCharge + (totalValue ? 199 : 0)
 
   const addProductToHamper = (product) => {
-    const itemPrice = Number(product.price || 0)
-    if (!product.is_builder_only && totalValue + itemPrice + packagingCharge + personalisationCharge > budgetLimit) {
+    const itemPrice = Number(product.price)
+    if (totalValue + itemPrice + packagingCharge + personalisationCharge > budgetLimit) {
       setBudgetWarning('That item would exceed your selected budget. Choose another item or increase your budget.')
       return
     }
@@ -2207,11 +2192,6 @@ function BuilderPage({ products, builderItems, builderItemsLoading, builderItems
     if (!builder.selectedProducts.length) {
       setBudgetWarning('Add at least one product before adding your hamper to the cart.')
       setCurrentStep(3)
-      return
-    }
-    if (hasSelectionOnlyItems) {
-      setBudgetWarning('Some selected items are previews only and need catalog setup before this hamper can be ordered.')
-      setCurrentStep(6)
       return
     }
     if (estimatedTotal - 199 > budgetLimit) {
@@ -2319,8 +2299,8 @@ function BuilderPage({ products, builderItems, builderItemsLoading, builderItems
                   {builderCategories.map((category) => <option key={category} value={category}>{category}</option>)}
                 </select>
               </label>
-              {builderItemsError && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{builderItemsError}</p>}
-              {builderItemsLoading && <CatalogLoadingState />}
+              {productsError && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{productsError}</p>}
+              {productsLoading && <CatalogLoadingState />}
 
               <div className="grid gap-5 md:grid-cols-2">
                 {visibleBuilderChoices.map((product) => {
@@ -2333,9 +2313,7 @@ function BuilderPage({ products, builderItems, builderItemsLoading, builderItems
                           <div className="text-sm font-medium text-[#7a6470]">{product.category}</div>
                           <div className="mt-1 text-lg font-semibold text-[#2d1b21]">{product.name}</div>
                         </div>
-                        {product.is_builder_only
-                          ? <div className="text-xs font-medium text-[#7f3d52]">Selection only</div>
-                          : <div className="text-base font-semibold text-[#2d1b21]">{formatMoney(product.price)}</div>}
+                        <div className="text-base font-semibold text-[#2d1b21]">{formatMoney(product.price)}</div>
                       </div>
                       <p className="mt-2 text-sm leading-6 text-[#5c4e52]">{product.shortDescription}</p>
                       <button
@@ -2446,11 +2424,6 @@ function BuilderPage({ products, builderItems, builderItemsLoading, builderItems
                   Edit packaging
                 </button>
               </div>
-              {hasSelectionOnlyItems && (
-                <p role="status" className="rounded-xl bg-[#E9D8D2] px-4 py-3 text-sm text-[#514542]">
-                  Some selected items are previews only and need catalog setup before this hamper can be ordered.
-                </p>
-              )}
               {budgetWarning && <p role="status" className="text-sm">{budgetWarning}</p>}
             </div>
           )}
@@ -2472,12 +2445,9 @@ function BuilderPage({ products, builderItems, builderItemsLoading, builderItems
                   setCurrentStep((step) => Math.min(step + 1, steps.length - 1))
                 }
               }}
-              disabled={currentStep === steps.length - 1 && hasSelectionOnlyItems}
               className="rounded-full bg-[#2f1f25] px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {currentStep === steps.length - 1
-                ? (hasSelectionOnlyItems ? 'Items need setup' : 'Add to cart')
-                : 'Next'}
+              {currentStep === steps.length - 1 ? 'Add to cart' : 'Next'}
             </button>
           </div>
         </div>
@@ -2512,7 +2482,7 @@ function BuilderPage({ products, builderItems, builderItemsLoading, builderItems
                   <div className="flex-1">
                     <div className="text-sm font-medium text-[#2d1b21]">{item.name}</div>
                     <div className="text-xs text-[#7a6570]">
-                      {item.is_builder_only ? 'Selection only' : formatMoney(item.price)}
+                      {formatMoney(item.price)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 rounded-full border border-[#f0dfe5] px-2 py-1">
@@ -2533,24 +2503,18 @@ function BuilderPage({ products, builderItems, builderItemsLoading, builderItems
           </div>
 
           <div className="mt-6 rounded-[24px] bg-[#2f1f25] p-5 text-white">
-            {hasSelectionOnlyItems ? (
-              <p className="text-sm text-[#E9D8D2]">Final summary will be available after these selections are configured.</p>
-            ) : (
-              <>
-                <div className="flex items-center justify-between text-sm text-[#ebdfe5]">
-                  <span>Estimated total</span>
-                  <span>{formatMoney(estimatedTotal)}</span>
-                </div>
-                <div className="mt-4 space-y-1 text-sm text-[#E9D8D2]">
-                  <div className="flex justify-between"><span>Products</span><span>{formatMoney(totalValue)}</span></div>
-                  <div className="flex justify-between"><span>Packaging</span><span>{formatMoney(packagingCharge)}</span></div>
-                  <div className="flex justify-between"><span>Personalisation</span><span>{formatMoney(personalisationCharge)}</span></div>
-                  <div className="flex justify-between"><span>Delivery</span><span>{formatMoney(totalValue ? 199 : 0)}</span></div>
-                </div>
-                <div className="mt-4 text-2xl font-bold">{formatMoney(estimatedTotal)}</div>
-              </>
-            )}
-            {!hasSelectionOnlyItems && estimatedTotal - 199 > budgetLimit && (
+            <div className="flex items-center justify-between text-sm text-[#ebdfe5]">
+              <span>Estimated total</span>
+              <span>{formatMoney(estimatedTotal)}</span>
+            </div>
+            <div className="mt-4 space-y-1 text-sm text-[#E9D8D2]">
+              <div className="flex justify-between"><span>Products</span><span>{formatMoney(totalValue)}</span></div>
+              <div className="flex justify-between"><span>Packaging</span><span>{formatMoney(packagingCharge)}</span></div>
+              <div className="flex justify-between"><span>Personalisation</span><span>{formatMoney(personalisationCharge)}</span></div>
+              <div className="flex justify-between"><span>Delivery</span><span>{formatMoney(totalValue ? 199 : 0)}</span></div>
+            </div>
+            <div className="mt-4 text-2xl font-bold">{formatMoney(estimatedTotal)}</div>
+            {estimatedTotal - 199 > budgetLimit && (
               <p className="mt-2 text-sm text-[#E9D8D2]">Over selected budget</p>
             )}
             <button

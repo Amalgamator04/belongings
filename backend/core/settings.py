@@ -223,5 +223,25 @@ if not DEBUG and EMAIL_BACKEND.endswith('smtp.EmailBackend'):
             + ', '.join(missing_email_settings)
         )
 
+if not DEBUG and EMAIL_BACKEND == 'django.core.mail.backends.console.EmailBackend':
+    raise RuntimeError('The console email backend does not deliver production emails.')
+
 if EMAIL_USE_TLS and EMAIL_USE_SSL:
     raise RuntimeError('Choose either EMAIL_USE_TLS or EMAIL_USE_SSL, not both.')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'store.services': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}

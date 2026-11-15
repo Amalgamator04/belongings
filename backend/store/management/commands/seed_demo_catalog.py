@@ -16,48 +16,6 @@ CATEGORY_DATA = [
     ('Gift hampers', 'gift-hampers', 'Curated gift hampers', '#F5EFE6', 'package'),
     ('Gift bouquets', 'gift-bouquets', 'Gift-ready bouquets', '#E9D8D2', 'flower'),
     ('Packaging accessories', 'packaging-accessories', 'Finishing touches for gifts', '#B9A2A0', 'ribbon'),
-    ("Girls' accessories", 'girls-accessories', 'Accessories for custom hampers', '#E9D8D2', 'sparkles'),
-    ('Beauty and self-care', 'beauty-and-self-care', 'Self-care selections for custom hampers', '#B9A2A0', 'heart'),
-    ('Personalised products', 'personalised-products', 'Personalised selections for custom hampers', '#F5EFE6', 'pen-line'),
-    ('Cute and decorative products', 'cute-and-decorative-products', 'Decorative selections for custom hampers', '#B7B3A5', 'flower'),
-]
-
-BUILDER_ITEM_DATA = [
-    ('Satin scrunchie', 'builder-satin-scrunchie', "Girls' accessories", 'A soft satin scrunchie for a personal gift hamper.'),
-    ('Claw clip', 'builder-claw-clip', "Girls' accessories", 'A stylish claw clip to add to a custom hamper.'),
-    ('Cute hair clips', 'builder-cute-hair-clips', "Girls' accessories", 'A playful pair of clips for a thoughtful gift.'),
-    ('Pearl hair clip', 'builder-pearl-hair-clip', "Girls' accessories", 'A pearl-accented hair clip for a polished gift.'),
-    ('Bracelet', 'builder-bracelet', "Girls' accessories", 'A simple bracelet to make a hamper feel personal.'),
-    ('Minimal necklace', 'builder-minimal-necklace', "Girls' accessories", 'A minimal necklace for a keepsake-style hamper.'),
-    ('Earrings', 'builder-earrings', "Girls' accessories", 'A pair of earrings for a small celebratory gift.'),
-    ('Cute keychain', 'builder-cute-keychain', "Girls' accessories", 'A cheerful keychain for a custom gift box.'),
-    ('Mini jewellery pouch', 'builder-mini-jewellery-pouch', "Girls' accessories", 'A small pouch for organising jewellery and keepsakes.'),
-    ('Pocket mirror', 'builder-pocket-mirror', "Girls' accessories", 'A compact mirror to complete a self-care hamper.'),
-    ('Lip balm', 'builder-lip-balm', 'Beauty and self-care', 'A lip balm for a little self-care moment.'),
-    ('Sheet mask', 'builder-sheet-mask', 'Beauty and self-care', 'A sheet mask for a relaxing gift hamper.'),
-    ('Mini hand cream', 'builder-mini-hand-cream', 'Beauty and self-care', 'A travel-size hand cream for a pampering gift.'),
-    ('Mini perfume', 'builder-mini-perfume', 'Beauty and self-care', 'A small fragrance selection for a personal hamper.'),
-    ('Nail paint', 'builder-nail-paint', 'Beauty and self-care', 'A nail colour to brighten a self-care hamper.'),
-    ('Nail art stickers', 'builder-nail-art-stickers', 'Beauty and self-care', 'Decorative nail stickers for a creative gift.'),
-    ('Mini body mist', 'builder-mini-body-mist', 'Beauty and self-care', 'A compact body mist for a fresh, thoughtful gift.'),
-    ('Under-eye patches', 'builder-under-eye-patches', 'Beauty and self-care', 'Under-eye patches for a relaxing self-care set.'),
-    ('Polaroid photo print', 'builder-polaroid-photo-print', 'Personalised products', 'A photo print to add a personal memory to a gift.'),
-    ('Personalised message card', 'builder-personalised-message-card', 'Personalised products', 'A message card for a note written especially for them.'),
-    ('Photo strip', 'builder-photo-strip', 'Personalised products', 'A photo strip to keep favourite moments close.'),
-    ('Personalised bookmark', 'builder-personalised-bookmark', 'Personalised products', 'A personalised bookmark for a thoughtful keepsake.'),
-    ('Custom name tag', 'builder-custom-name-tag', 'Personalised products', 'A custom name tag for a personal finishing touch.'),
-    ('Photo keychain', 'builder-photo-keychain', 'Personalised products', 'A photo keychain for carrying a favourite memory.'),
-    ('Mini photo frame', 'builder-mini-photo-frame', 'Personalised products', 'A small frame for a meaningful photo.'),
-    ('Spotify-style photo plaque', 'builder-spotify-style-photo-plaque', 'Personalised products', 'A custom photo plaque inspired by a favourite song.'),
-    ('Mini teddy bear', 'builder-mini-teddy-bear', 'Cute and decorative products', 'A little teddy bear for a warm, cuddly gift.'),
-    ('Artificial rose', 'builder-artificial-rose', 'Cute and decorative products', 'A decorative rose to add a floral touch to a hamper.'),
-    ('Artificial flower bunch', 'builder-artificial-flower-bunch', 'Cute and decorative products', 'A small bunch of decorative flowers for gifting.'),
-    ("Baby's breath filler", 'builder-babys-breath-filler', 'Cute and decorative products', "A baby's breath-style filler for floral arrangements."),
-    ('Mini scented candle', 'builder-mini-scented-candle', 'Cute and decorative products', 'A small candle for a cosy, decorative gift.'),
-    ('Fairy lights', 'builder-fairy-lights', 'Cute and decorative products', 'A string of lights to add a soft glow to a hamper.'),
-    ('Decorative butterflies', 'builder-decorative-butterflies', 'Cute and decorative products', 'Decorative butterflies for a playful gift presentation.'),
-    ('Pearl strings', 'builder-pearl-strings', 'Cute and decorative products', 'Pearl strings for decorating a custom gift.'),
-    ('Mini plushie', 'builder-mini-plushie', 'Cute and decorative products', 'A mini plushie for a soft, cheerful hamper.'),
 ]
 
 PRODUCT_DATA = [
@@ -265,7 +223,6 @@ class Command(BaseCommand):
                 'stock': entry['stock'],
                 'is_featured': entry['featured'],
                 'is_available': True,
-                'is_builder_only': False,
                 'rating': 0.0,
             }
             Product.objects.update_or_create(
@@ -273,37 +230,6 @@ class Command(BaseCommand):
                 defaults={'name': entry['name'], **defaults},
             )
 
-        builder_images = {
-            "Girls' accessories": 'https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=900&q=80',
-            'Beauty and self-care': 'https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=900&q=80',
-            'Personalised products': 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=900&q=80',
-            'Cute and decorative products': 'https://images.unsplash.com/photo-1490750967868-88aa4486c946?auto=format&fit=crop&w=900&q=80',
-        }
-        for name, slug, category_name, description in BUILDER_ITEM_DATA:
-            image = builder_images[category_name]
-            Product.objects.update_or_create(
-                slug=slug,
-                defaults={
-                    'name': name,
-                    'category': categories[category_name],
-                    'short_description': description,
-                    'description': 'Builder-only selection. Configure this item before enabling orders.',
-                    'price': None,
-                    'compare_price': Decimal('0.00'),
-                    'image': image,
-                    'gallery': [image],
-                    'tags': ['builder-only'],
-                    'badge': 'BUILDER',
-                    'occasion': 'Any occasion',
-                    'stock': 0,
-                    'is_featured': False,
-                    'is_available': True,
-                    'is_builder_only': True,
-                    'rating': 0.0,
-                },
-            )
-
         self.stdout.write(self.style.SUCCESS(
-            f'Catalog ready: {len(categories)} categories, {len(PRODUCT_DATA)} shop products, '
-            f'{len(BUILDER_ITEM_DATA)} builder-only selections.'
+            f'Catalog ready: {len(categories)} categories and {len(PRODUCT_DATA)} shop products.'
         ))
