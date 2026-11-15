@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -342,6 +343,125 @@ class AdminProductCatalogTests(APITestCase):
                 slug='girls-accessories',
             ).exists()
         )
+
+    def test_csv_import_endpoints_are_staff_only(self):
+        def category_file():
+            return SimpleUploadedFile(
+                'categories.csv',
+                b'name,slug\nCandles,candles\n',
+                content_type='text/csv',
+            )
+
+        def product_file():
+            return SimpleUploadedFile(
+                'products.csv',
+                b'name,slug,category_slug,price\nCandle,candle,candles,20\n',
+                content_type='text/csv',
+            )
+
+        self.assertEqual(
+            self.client.post(
+                reverse('admin-categories-import'),
+                {'file': category_file()},
+                format='multipart',
+            ).status_code,
+            401,
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse('admin-products-import'),
+                {'file': product_file()},
+                format='multipart',
+            ).status_code,
+            401,
+        )
+
+        customer = get_user_model().objects.create_user(
+            username='csv-customer',
+            email='csv-customer@example.com',
+            password='A-strong-example-password-2026',
+        )
+        self.client.force_authenticate(customer)
+        self.assertEqual(
+            self.client.post(
+                reverse('admin-categories-import'),
+                {'file': category_file()},
+                format='multipart',
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse('admin-products-import'),
+                {'file': product_file()},
+                format='multipart',
+            ).status_code,
+            403,
+        )
+
+    def test_staff_can_import_categories_and_products_from_csv(self):
+        self.client.force_authenticate(self.admin)
+        category_csv = SimpleUploadedFile(
+            'categories.csv',
+            b'name,slug,description\nCandles,candles,Scented candles\n',
+            content_type='text/csv',
+        )
+        categories_response = self.client.post(
+            reverse('admin-categories-import'),
+            {'file': category_csv},
+            format='multipart',
+        )
+        self.assertEqual(categories_response.status_code, 201)
+        self.assertEqual(categories_response.data['created'], 1)
+
+        product_csv = SimpleUploadedFile(
+            'products.csv',
+            b'name,category_slug,price,is_builder_only,gallery,tags\n'
+            b'Candle,candles,20,false,,home|scent\n'
+            b'Satin Scrunchie,gift-hampers,,true,,hair|gift\n',
+            content_type='text/csv',
+        )
+        products_response = self.client.post(
+            reverse('admin-products-import'),
+            {'file': product_csv},
+            format='multipart',
+        )
+        self.assertEqual(products_response.status_code, 201)
+        self.assertEqual(products_response.data['created'], 2)
+
+        candle = Product.objects.get(slug='candle')
+        self.assertEqual(candle.category.slug, 'candles')
+        self.assertEqual(candle.price, Decimal('20.00'))
+        self.assertEqual(candle.tags, ['home', 'scent'])
+        builder_item = Product.objects.get(slug='satin-scrunchie')
+        self.assertTrue(builder_item.is_builder_only)
+        self.assertIsNone(builder_item.price)
+
+    def test_invalid_product_csv_does_not_import_any_rows(self):
+        self.client.force_authenticate(self.admin)
+        product_count = Product.objects.count()
+        product_csv = SimpleUploadedFile(
+            'products.csv',
+            b'name,slug,category_slug,price\n'
+            b'Valid Product,valid-product,gift-hampers,25\n'
+            b'Invalid Product,invalid-product,unknown-category,30\n'
+            b'Duplicate Product,valid-product,gift-hampers,30\n'
+            b'Existing Product,rose-gift-box,gift-hampers,30\n',
+            content_type='text/csv',
+        )
+
+        response = self.client.post(
+            reverse('admin-products-import'),
+            {'file': product_csv},
+            format='multipart',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual([error['row'] for error in response.data['errors']], [3, 4, 5])
+        self.assertIn('slug', response.data['errors'][1]['errors'])
+        self.assertIn('slug', response.data['errors'][2]['errors'])
+        self.assertEqual(Product.objects.count(), product_count)
+        self.assertFalse(Product.objects.filter(slug='valid-product').exists())
 
     def test_staff_can_filter_create_update_and_delete_products(self):
         builder_item = Product.objects.create(

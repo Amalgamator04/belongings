@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import {
   ArrowRight,
@@ -1061,7 +1061,10 @@ function AdminProductManager({ auth }) {
   const [categoryName, setCategoryName] = useState('')
   const [categoryFormError, setCategoryFormError] = useState('')
   const [categorySaving, setCategorySaving] = useState(false)
+  const [csvImport, setCsvImport] = useState({ busy: false, message: '', errors: [] })
   const [saving, setSaving] = useState(false)
+  const categoryCsvInput = useRef(null)
+  const productCsvInput = useRef(null)
   const requestKey = JSON.stringify([search, categoryFilter, builderFilter, page, reloadKey])
   const hasCurrentProducts = productsState.key === requestKey
   const products = hasCurrentProducts ? productsState.products : []
@@ -1096,7 +1099,7 @@ function AdminProductManager({ auth }) {
         })
       })
     return () => { active = false }
-  }, [auth.access])
+  }, [auth.access, reloadKey])
 
   useEffect(() => {
     let active = true
@@ -1200,6 +1203,81 @@ function AdminProductManager({ auth }) {
       setCategoryFormError(firstFieldError || 'We could not create this category. Please try again.')
     } finally {
       setCategorySaving(false)
+    }
+  }
+
+  const downloadCsvTemplate = (type) => {
+    const templates = {
+      categories: {
+        filename: 'category-import-template.csv',
+        rows: [
+          ['name', 'slug', 'description', 'accent', 'icon'],
+          ['Gift hampers', 'gift-hampers', 'Curated gift hampers', '#E9D8D2', 'gift'],
+        ],
+      },
+      products: {
+        filename: 'product-import-template.csv',
+        rows: [
+          [
+            'name', 'slug', 'category_slug', 'short_description', 'description', 'price',
+            'compare_price', 'image', 'gallery', 'tags', 'badge', 'occasion', 'stock',
+            'is_featured', 'is_available', 'is_builder_only', 'rating',
+          ],
+          [
+            'Rose Gift Box', 'rose-gift-box', 'gift-hampers', 'A curated gift box', '',
+            '1250', '1500', 'https://example.com/rose-box.jpg', '', 'rose|birthday',
+            'Gift idea', 'Birthday', '10', 'true', 'true', 'false', '4.8',
+          ],
+        ],
+      },
+    }
+    const template = templates[type]
+    const csv = template.rows
+      .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
+      .join('\r\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = template.filename
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+
+  const importCsv = async (type, event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    setCsvImport({ busy: true, message: '', errors: [] })
+    const upload = new FormData()
+    upload.append('file', file)
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/admin/${type}/import/`,
+        upload,
+        { headers },
+      )
+      setCsvImport({
+        busy: false,
+        message: `Imported ${response.data.created} ${type}.`,
+        errors: [],
+      })
+      setReloadKey((key) => key + 1)
+    } catch (requestError) {
+      console.error(`Unable to import ${type} CSV.`, requestError)
+      const responseData = requestError.response?.data
+      const message = typeof responseData?.detail === 'string'
+        ? responseData.detail
+        : responseData?.file
+          ? Array.isArray(responseData.file)
+            ? responseData.file.join(' ')
+            : responseData.file
+          : `We could not import the ${type} CSV. Check the file and try again.`
+      setCsvImport({
+        busy: false,
+        message,
+        errors: Array.isArray(responseData?.errors) ? responseData.errors : [],
+      })
     }
   }
 
@@ -1341,6 +1419,63 @@ function AdminProductManager({ auth }) {
           </button>
         </form>
       )}
+
+      <section className="space-y-4 rounded-[24px] border border-[#E9D8D2] bg-white p-5 md:p-7">
+        <div>
+          <h2 className="text-xl font-semibold text-[#2d1b21]">Import catalog CSVs</h2>
+          <p className="mt-2 text-sm leading-6 text-[#645761]">
+            Admin-only, create-only imports. Categories must be imported before products that use them.
+            Product rows can reference a category by name or slug; separate gallery and tag values with |.
+            Invalid rows or duplicates prevent the entire file from being imported.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button type="button" onClick={() => downloadCsvTemplate('categories')} className="rounded-full border border-[#E9D8D2] px-4 py-2.5 text-sm font-medium text-[#514542]">
+            Download category template
+          </button>
+          <button type="button" onClick={() => categoryCsvInput.current?.click()} disabled={csvImport.busy} className="rounded-full bg-[#514542] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+            Import categories CSV
+          </button>
+          <button type="button" onClick={() => downloadCsvTemplate('products')} className="rounded-full border border-[#E9D8D2] px-4 py-2.5 text-sm font-medium text-[#514542]">
+            Download product template
+          </button>
+          <button type="button" onClick={() => productCsvInput.current?.click()} disabled={csvImport.busy} className="rounded-full bg-[#514542] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+            Import products CSV
+          </button>
+          <input
+            ref={categoryCsvInput}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(event) => importCsv('categories', event)}
+          />
+          <input
+            ref={productCsvInput}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(event) => importCsv('products', event)}
+          />
+        </div>
+        {csvImport.busy && <p role="status" className="text-sm text-[#645761]">Importing CSV…</p>}
+        {csvImport.message && (
+          <div role={csvImport.errors.length ? 'alert' : 'status'} className={`rounded-xl px-4 py-3 text-sm ${csvImport.errors.length ? 'bg-red-50 text-red-800' : 'bg-[#F5EFE6] text-[#514542]'}`}>
+            <p>{csvImport.message}</p>
+            {csvImport.errors.length > 0 && (
+              <ul className="mt-2 list-inside list-disc space-y-1">
+                {csvImport.errors.slice(0, 20).map((rowError, index) => (
+                  <li key={`${rowError.row}-${index}`}>
+                    Row {rowError.row}: {Object.entries(rowError.errors || {}).map(([field, messages]) => (
+                      `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`
+                    )).join('; ')}
+                  </li>
+                ))}
+                {csvImport.errors.length > 20 && <li>And {csvImport.errors.length - 20} more row errors.</li>}
+              </ul>
+            )}
+          </div>
+        )}
+      </section>
 
       {!categories.length && !categoriesState.loading && !categoriesState.error && (
         <p role="status" className="rounded-xl bg-[#F5EFE6] px-4 py-3 text-sm text-[#514542]">
