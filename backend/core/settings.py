@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
 load_dotenv(BASE_DIR.parent / '.env')
 
 DEVELOPMENT_SECRET_KEY = 'dev-only-change-this-secret-key-before-deployment'
@@ -85,23 +86,15 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-database_url = os.environ.get('DATABASE_URL')
+database_url = os.environ.get('DATABASE_URL', '').strip()
 if database_url:
     DATABASES['default'] = dj_database_url.parse(
         database_url,
         conn_max_age=600,
         ssl_require=not DEBUG,
     )
-elif os.environ.get('POSTGRES_DB'):
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ['POSTGRES_DB'],
-        'USER': os.environ.get('POSTGRES_USER', ''),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', ''),
-        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
-        'CONN_MAX_AGE': 60,
-    }
+elif not DEBUG:
+    raise RuntimeError('Set DATABASE_URL before running with DJANGO_DEBUG=false.')
 
 AUTH_PASSWORD_VALIDATORS = [
     {

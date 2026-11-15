@@ -276,8 +276,8 @@ def admin_dashboard(request):
         'total_orders': aggregates['total_orders'],
         'pending_orders': status_counts.get('placed', 0),
         'completed_orders': status_counts.get('delivered', 0),
-        'total_order_value': str(order_value),
-        'total_revenue': str(order_value),
+        'total_order_value': f'{order_value:.2f}',
+        'total_revenue': f'{order_value:.2f}',
         'status_choices': [
             {'value': value, 'label': label, 'count': status_counts.get(value, 0)}
             for value, label in Order.STATUS_CHOICES
@@ -286,7 +286,7 @@ def admin_dashboard(request):
             {
                 'date': row['day'].isoformat(),
                 'orders': row['orders'],
-                'order_value': str(row['order_value'] or Decimal('0.00')),
+                'order_value': f'{row["order_value"] or Decimal("0.00"):.2f}',
             }
             for row in daily_totals
         ],
