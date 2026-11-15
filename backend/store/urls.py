@@ -4,6 +4,7 @@ from .views import (
     addresses,
     admin_dashboard,
     admin_categories,
+    admin_categories_import,
     builder_item_list,
     categories,
     create_order,
@@ -19,6 +20,7 @@ from .views import (
     admin_orders,
     admin_product_detail,
     admin_products,
+    admin_products_import,
     update_order_status,
 )
 
@@ -38,7 +40,9 @@ urlpatterns = [
     path('api/auth/register/', register, name='register'),
     path('api/admin/orders/', admin_orders, name='admin-orders'),
     path('api/admin/categories/', admin_categories, name='admin-categories'),
+    path('api/admin/categories/import/', admin_categories_import, name='admin-categories-import'),
     path('api/admin/products/', admin_products, name='admin-products'),
+    path('api/admin/products/import/', admin_products_import, name='admin-products-import'),
     path('api/admin/products/<int:product_id>/', admin_product_detail, name='admin-product-detail'),
     path('api/admin/dashboard/', admin_dashboard, name='admin-dashboard'),
     path('api/admin/orders/<int:order_id>/status/', update_order_status, name='update-order-status'),

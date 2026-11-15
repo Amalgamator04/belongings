@@ -55,6 +55,8 @@ MAX_ADMIN_CSV_ROWS = 500
 
 
 def _read_admin_csv(uploaded_file, allowed_headers):
+    if uploaded_file is None:
+        raise ValidationError({'file': 'Upload a CSV file using the file field.'})
     if uploaded_file.size > MAX_ADMIN_CSV_BYTES:
         raise ValidationError({'file': 'CSV files must be 2 MB or smaller.'})
     try:
@@ -97,10 +99,10 @@ def _read_admin_csv(uploaded_file, allowed_headers):
 
     if not rows:
         raise ValidationError({'file': 'The CSV contains no data rows.'})
-    return rows
+    return headers, rows
 
 
-def _csv_list_value(value, row_number, field, row_errors):
+def _csv_list_value(value, field, row_errors):
     if not value:
         return []
     try:
@@ -114,7 +116,7 @@ def _csv_list_value(value, row_number, field, row_errors):
     return [item.strip() for item in parsed if item.strip()]
 
 
-def _duplicate_slug_error(slug, seen_slugs, row_number, field='slug'):
+def _duplicate_slug_error(slug, seen_slugs, field='slug'):
     if slug in seen_slugs:
         return {field: ['This slug is duplicated within the CSV file.']}
     seen_slugs.add(slug)
@@ -273,6 +275,50 @@ def admin_categories(request):
     return Response(CategorySerializer(categories, many=True).data)
 
 
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+@permission_classes([IsAdminUser])
+def admin_categories_import(request):
+    allowed_headers = {'name', 'slug', 'description', 'accent', 'icon'}
+    headers, rows = _read_admin_csv(request.FILES.get('file'), allowed_headers)
+    if 'name' not in headers:
+        raise ValidationError({'file': 'The category CSV must include a name column.'})
+
+    serializers = []
+    row_errors = []
+    seen_slugs = set()
+    for row_number, row in rows:
+        data = {
+            'name': row.get('name', ''),
+            'slug': row.get('slug') or slugify(row.get('name', '')),
+        }
+        for field in ('description', 'accent', 'icon'):
+            if row.get(field):
+                data[field] = row[field]
+
+        errors = _duplicate_slug_error(data['slug'], seen_slugs)
+        serializer = CategorySerializer(data=data)
+        if not serializer.is_valid():
+            errors.update(serializer.errors)
+        serializers.append(serializer)
+        if errors:
+            row_errors.append({'row': row_number, 'errors': errors})
+
+    if row_errors:
+        return Response(
+            {
+                'detail': 'No categories were imported. Fix the listed rows and try again.',
+                'errors': row_errors,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    with transaction.atomic():
+        for serializer in serializers:
+            serializer.save()
+    return Response({'created': len(serializers)}, status=status.HTTP_201_CREATED)
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAdminUser])
 def admin_products(request):
@@ -305,6 +351,82 @@ def admin_products(request):
     paginator.page_size = 20
     page = paginator.paginate_queryset(products.order_by('name', 'pk'), request)
     return paginator.get_paginated_response(AdminProductSerializer(page, many=True).data)
+
+
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+@permission_classes([IsAdminUser])
+def admin_products_import(request):
+    allowed_headers = {
+        'name', 'slug', 'category', 'category_slug', 'short_description', 'description',
+        'price', 'compare_price', 'image', 'gallery', 'tags', 'badge', 'occasion',
+        'stock', 'is_featured', 'is_available', 'is_builder_only', 'rating',
+    }
+    headers, rows = _read_admin_csv(request.FILES.get('file'), allowed_headers)
+    if 'name' not in headers or not {'category', 'category_slug'} & set(headers):
+        raise ValidationError({
+            'file': 'The product CSV must include name and either category or category_slug columns.',
+        })
+
+    category_by_slug = {}
+    category_by_name = {}
+    for category in Category.objects.all():
+        category_by_slug[category.slug.lower()] = category
+        category_by_name.setdefault(category.name.lower(), category)
+
+    serializers = []
+    row_errors = []
+    seen_slugs = set()
+    for row_number, row in rows:
+        name = row.get('name', '')
+        slug = row.get('slug') or slugify(name)
+        category_value = row.get('category_slug') or row.get('category', '')
+        errors = _duplicate_slug_error(slug, seen_slugs)
+        if row.get('category_slug') and row.get('category') and (
+            row['category_slug'].lower() != row['category'].lower()
+        ):
+            errors['category'] = ['Use the same value in category and category_slug, or leave one blank.']
+        category = (
+            category_by_slug.get(category_value.lower())
+            or category_by_name.get(category_value.lower())
+        )
+        if not category:
+            errors['category'] = ['Choose an existing category by name or slug.']
+
+        data = {'name': name, 'slug': slug}
+        if category:
+            data['category'] = category.pk
+        for field in (
+            'short_description', 'description', 'price', 'compare_price', 'image',
+            'badge', 'occasion', 'stock', 'is_featured', 'is_available',
+            'is_builder_only', 'rating',
+        ):
+            if row.get(field):
+                data[field] = row[field]
+        for field in ('gallery', 'tags'):
+            if row.get(field):
+                data[field] = _csv_list_value(row[field], field, errors)
+
+        serializer = AdminProductSerializer(data=data)
+        if not serializer.is_valid():
+            errors.update(serializer.errors)
+        serializers.append(serializer)
+        if errors:
+            row_errors.append({'row': row_number, 'errors': errors})
+
+    if row_errors:
+        return Response(
+            {
+                'detail': 'No products were imported. Fix the listed rows and try again.',
+                'errors': row_errors,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    with transaction.atomic():
+        for serializer in serializers:
+            serializer.save()
+    return Response({'created': len(serializers)}, status=status.HTTP_201_CREATED)
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
