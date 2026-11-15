@@ -1,11 +1,45 @@
 from django.urls import path
 
-from .views import categories, create_order, healthcheck, product_detail, product_list
+from .views import (
+    addresses,
+    admin_dashboard,
+    admin_categories,
+    builder_item_list,
+    categories,
+    create_order,
+    healthcheck,
+    order_detail,
+    product_detail,
+    product_detail_by_id,
+    product_list,
+    profile,
+    register,
+    subscribe_newsletter,
+    track_order,
+    admin_orders,
+    admin_product_detail,
+    admin_products,
+    update_order_status,
+)
 
 urlpatterns = [
     path('', healthcheck, name='healthcheck'),
     path('api/products/', product_list, name='products'),
+    path('api/builder-items/', builder_item_list, name='builder-items'),
+    path('api/products/<int:product_id>/', product_detail_by_id, name='product-detail-by-id'),
     path('api/products/<slug:slug>/', product_detail, name='product-detail'),
     path('api/categories/', categories, name='categories'),
+    path('api/newsletter/', subscribe_newsletter, name='newsletter'),
     path('api/orders/', create_order, name='orders'),
+    path('api/orders/track/', track_order, name='track-order'),
+    path('api/orders/<int:order_id>/', order_detail, name='order-detail'),
+    path('api/profile/', profile, name='profile'),
+    path('api/addresses/', addresses, name='addresses'),
+    path('api/auth/register/', register, name='register'),
+    path('api/admin/orders/', admin_orders, name='admin-orders'),
+    path('api/admin/categories/', admin_categories, name='admin-categories'),
+    path('api/admin/products/', admin_products, name='admin-products'),
+    path('api/admin/products/<int:product_id>/', admin_product_detail, name='admin-product-detail'),
+    path('api/admin/dashboard/', admin_dashboard, name='admin-dashboard'),
+    path('api/admin/orders/<int:order_id>/status/', update_order_status, name='update-order-status'),
 ]

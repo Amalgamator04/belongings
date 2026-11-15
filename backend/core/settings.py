@@ -10,13 +10,30 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR.parent / '.env')
 
-SECRET_KEY = 'django-insecure-pa8x^+pbo9a5z@j-_u9ow6!%22y$*4w@966p#p9(z&1qv!+*3d'
-DEBUG = True
-ALLOWED_HOSTS = ['*']
+DEVELOPMENT_SECRET_KEY = 'dev-only-change-this-secret-key-before-deployment'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or DEVELOPMENT_SECRET_KEY
+DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() == 'true'
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+    if host.strip()
+]
+
+if not DEBUG and (
+    SECRET_KEY == DEVELOPMENT_SECRET_KEY
+    or len(SECRET_KEY) < 50
+    or 'replace-with' in SECRET_KEY.lower()
+):
+    raise RuntimeError('Set a random DJANGO_SECRET_KEY of at least 50 characters in production.')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -27,11 +44,13 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'store',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -66,6 +85,23 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+database_url = os.environ.get('DATABASE_URL')
+if database_url:
+    DATABASES['default'] = dj_database_url.parse(
+        database_url,
+        conn_max_age=600,
+        ssl_require=not DEBUG,
+    )
+elif os.environ.get('POSTGRES_DB'):
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ['POSTGRES_DB'],
+        'USER': os.environ.get('POSTGRES_USER', ''),
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', ''),
+        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
+        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        'CONN_MAX_AGE': 60,
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -88,14 +124,111 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 24,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour',
+    },
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
+    origin.strip()
+    for origin in os.environ.get(
+        'CORS_ALLOWED_ORIGINS',
+        'http://localhost:5173,http://127.0.0.1:5173',
+    ).split(',')
+    if origin.strip()
 ]
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
+]
+FRONTEND_BASE_URL = os.environ.get(
+    'FRONTEND_BASE_URL',
+    'http://127.0.0.1:5173',
+).rstrip('/')
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = os.environ.get(
+    'DJANGO_SECURE_SSL_REDIRECT',
+    'false' if DEBUG else 'true',
+).lower() == 'true'
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = int(os.environ.get(
+    'DJANGO_HSTS_SECONDS',
+    '0' if DEBUG else '31536000',
+))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND') or (
+    'django.core.mail.backends.console.EmailBackend'
+    if DEBUG
+    else 'django.core.mail.backends.smtp.EmailBackend'
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+if EMAIL_HOST.lower() in {'smtp.gmail.com', 'smtp.googlemail.com'}:
+    EMAIL_HOST_PASSWORD = ''.join(EMAIL_HOST_PASSWORD.split())
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'true').lower() == 'true'
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'false').lower() == 'true'
+EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '20'))
+DEFAULT_FROM_EMAIL = (
+    os.environ.get('DEFAULT_FROM_EMAIL')
+    or EMAIL_HOST_USER
+    or 'Belongings <no-reply@example.invalid>'
+)
+
+if not DEBUG and EMAIL_BACKEND.endswith('smtp.EmailBackend'):
+    missing_email_settings = [
+        key
+        for key, value in {
+            'EMAIL_HOST': EMAIL_HOST,
+            'EMAIL_HOST_USER': EMAIL_HOST_USER,
+            'EMAIL_HOST_PASSWORD': EMAIL_HOST_PASSWORD,
+            'DEFAULT_FROM_EMAIL': os.environ.get('DEFAULT_FROM_EMAIL', ''),
+        }.items()
+        if not value
+    ]
+    if missing_email_settings:
+        raise RuntimeError(
+            'Set SMTP email settings before production: '
+            + ', '.join(missing_email_settings)
+        )
+
+if EMAIL_USE_TLS and EMAIL_USE_SSL:
+    raise RuntimeError('Choose either EMAIL_USE_TLS or EMAIL_USE_SSL, not both.')
