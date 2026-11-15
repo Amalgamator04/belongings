@@ -1,5 +1,8 @@
+import csv
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
+import io
+import json
 import re
 from urllib.parse import urlencode
 
@@ -11,9 +14,11 @@ from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.utils.text import slugify
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.exceptions import NotAuthenticated, NotFound, ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -45,6 +50,75 @@ PACKAGING_PRICES = {
 }
 PERSONALISATION_CHARGE = Decimal('49.00')
 DELIVERY_CHARGE = Decimal('199.00')
+MAX_ADMIN_CSV_BYTES = 2 * 1024 * 1024
+MAX_ADMIN_CSV_ROWS = 500
+
+
+def _read_admin_csv(uploaded_file, allowed_headers):
+    if uploaded_file.size > MAX_ADMIN_CSV_BYTES:
+        raise ValidationError({'file': 'CSV files must be 2 MB or smaller.'})
+    try:
+        content = uploaded_file.read().decode('utf-8-sig')
+    except UnicodeDecodeError as error:
+        raise ValidationError({'file': 'Save the CSV using UTF-8 encoding.'}) from error
+
+    try:
+        reader = csv.DictReader(io.StringIO(content), strict=True)
+        if not reader.fieldnames:
+            raise ValidationError({'file': 'The CSV must include a header row.'})
+        headers = [header.strip().lower() if header else '' for header in reader.fieldnames]
+        if not all(headers) or len(headers) != len(set(headers)):
+            raise ValidationError({'file': 'CSV headers must be non-empty and unique.'})
+        unknown_headers = sorted(set(headers) - set(allowed_headers))
+        if unknown_headers:
+            raise ValidationError({
+                'file': f'Unknown CSV columns: {", ".join(unknown_headers)}.',
+            })
+        reader.fieldnames = headers
+        rows = []
+        for row_number, row in enumerate(reader, start=2):
+            if None in row:
+                raise ValidationError({
+                    'file': f'Row {row_number} has more values than the header row.',
+                })
+            values = {
+                key: (value or '').strip()
+                for key, value in row.items()
+            }
+            if not any(values.values()):
+                continue
+            rows.append((row_number, values))
+            if len(rows) > MAX_ADMIN_CSV_ROWS:
+                raise ValidationError({
+                    'file': f'CSV files can contain at most {MAX_ADMIN_CSV_ROWS} data rows.',
+                })
+    except csv.Error as error:
+        raise ValidationError({'file': 'The CSV file is malformed.'}) from error
+
+    if not rows:
+        raise ValidationError({'file': 'The CSV contains no data rows.'})
+    return rows
+
+
+def _csv_list_value(value, row_number, field, row_errors):
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value) if value.startswith('[') else value.split('|')
+    except json.JSONDecodeError:
+        row_errors[field] = ['Use a JSON array or separate values with |.']
+        return []
+    if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+        row_errors[field] = ['Provide a list of text values.']
+        return []
+    return [item.strip() for item in parsed if item.strip()]
+
+
+def _duplicate_slug_error(slug, seen_slugs, row_number, field='slug'):
+    if slug in seen_slugs:
+        return {field: ['This slug is duplicated within the CSV file.']}
+    seen_slugs.add(slug)
+    return {}
 
 
 @api_view(['GET'])
